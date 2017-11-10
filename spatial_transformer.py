@@ -128,7 +128,8 @@ class AffineTransformer(object):
 
     """
 
-    def __init__(self, out_size, name='SpatialAffineTransformer', interp_method='bilinear', **kwargs):
+    def __init__(self, out_size, name='SpatialAffineTransformer',
+                 interp_method='bilinear', **kwargs):
         """
         Parameters
         ----------
@@ -146,8 +147,7 @@ class AffineTransformer(object):
         with tf.variable_scope(self.name):
             self.pixel_grid = _meshgrid(self.out_size)
         
-    
-    def transform(self, inp, theta):
+    def transform(self, inp, theta, batch_size):
         """
         Affine Transformation of input tensor inp with parameters theta
 
@@ -160,9 +160,12 @@ class AffineTransformer(object):
             The output of the localisation network
             should have the shape
             [batch_size, 6].
+        batch_size: int
+            The batch size.
         Notes
         -----
-        To initialize the network to the identity transform initialize ``theta`` to :
+        To initialize the network to the identity transform initialize
+        ``theta`` to :
             identity = np.array([[1., 0., 0.],
                                  [0., 1., 0.]])
             identity = identity.flatten()
@@ -170,24 +173,32 @@ class AffineTransformer(object):
 
         """
         with tf.variable_scope(self.name):
-            x_s, y_s = self._transform(inp, theta)
+            x_s, y_s = self._transform(inp, theta, batch_size=batch_size)
 
             output = _interpolate(
                 inp, x_s, y_s,
                 self.out_size,
                 method=self.interp_method
                 )
-    
-            batch_size, _, _, num_channels = inp.get_shape().as_list()
-            output = tf.reshape(output, [batch_size, self.out_size[0], self.out_size[1], num_channels])
+
+            if batch_size is None:
+                batch_size, _, _, num_channels = inp.get_shape().as_list()
+            else:
+                _, _, _, num_channels = inp.get_shape().as_list()
+            output = tf.reshape(
+                output,
+                [batch_size, self.out_size[0], self.out_size[1], num_channels]
+            )
 
         return output
 
-
-    
-    def _transform(self, inp, theta):
+    def _transform(self, inp, theta, batch_size=None):
         with tf.variable_scope(self.name + '_affine_transform'):
-            batch_size, _, _, num_channels = inp.get_shape().as_list()
+            # batch_size, _, _, num_channels = inp.get_shape().as_list()
+            shape = inp.get_shape().as_list()
+            num_channels  = shape[3]
+            if batch_size is None:
+                batch_size = shape[0]
 
             theta = tf.reshape(theta, (-1, 2, 3))
             pixel_grid = tf.tile(self.pixel_grid, [batch_size])
